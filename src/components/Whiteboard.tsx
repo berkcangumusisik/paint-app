@@ -693,7 +693,21 @@ export default function Whiteboard() {
 
       <MediaUploader onFileUpload={handleFileUpload} />
 
-      
+      {/* Buy Me a Coffee - Sağ üst köşe */}
+      <div className="absolute top-4 right-4 z-20">
+        <a
+          href="https://buymeacoffee.com/gumusisikbv"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Buy Me a Coffee"
+        >
+          <img 
+            src="https://miro.medium.com/v2/resize:fit:1090/0*lHgOW3tB_MfDAlBf.png" 
+            alt="Buy Me a Coffee" 
+            className="w-40 h-20 rounded-lg object-contain"
+          />
+        </a>
+      </div>
 
       {/* Alt bilgi barı: Hepsi tek kutuda, tek satırda, ortalanmış */}
       <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-10">
