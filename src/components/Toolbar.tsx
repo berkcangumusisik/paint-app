@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { DrawingState, Tool } from './Whiteboard';
 
 interface ToolbarProps {
@@ -14,6 +14,8 @@ interface ToolbarProps {
   canRedo: boolean;
   onPanMode?: () => void;
   isPanning?: boolean;
+  onBackgroundColorChange?: (color: string) => void;
+  backgroundColor?: string;
 }
 
 export default function Toolbar({ 
@@ -26,12 +28,20 @@ export default function Toolbar({
   canUndo,
   canRedo,
   onPanMode,
-  isPanning = false
+  isPanning = false,
+  onBackgroundColorChange,
+  backgroundColor = '#ffffff'
 }: ToolbarProps) {
   
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showSizeInput, setShowSizeInput] = useState(false);
   const [showToolSelect, setShowToolSelect] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [position, setPosition] = useState({ x: 16, y: 16 });
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [dropdownPosition, setDropdownPosition] = useState({ x: 0, y: 0 });
+  const toolbarRef = useRef<HTMLDivElement>(null);
 
   const tools: { id: Tool; icon: string; label: string; category: string; gradient?: string }[] = [
     { id: 'seç', icon: '🎯', label: 'Seç', category: 'selection', gradient: 'from-purple-500 to-pink-500' },
@@ -67,452 +77,211 @@ export default function Toolbar({
 
   const currentTool = tools.find(t => t.id === drawingState.tool);
 
-  return (
-    <div className="absolute top-4 left-4 right-4 z-20 bg-gradient-to-r from-white/95 via-white/98 to-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/50 p-4">
-      {/* Desktop Layout */}
-      <div className="hidden lg:flex items-center gap-4">
-        
-        {/* Action Buttons Group */}
-        <div className="flex gap-2 border-r border-gray-200/70 pr-4">
-          <button
-            onClick={onUndo}
-            disabled={!canUndo}
-            className={`group relative p-3 rounded-xl transition-all duration-300 ${
-              canUndo 
-                ? 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5' 
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            }`}
-            title="Geri Al (Ctrl+Z)"
-          >
-            <span className="text-lg">↶</span>
-            <span className="ml-2 text-sm font-medium">Geri Al</span>
-          </button>
-          
-          <button
-            onClick={onRedo}
-            disabled={!canRedo}
-            className={`group relative p-3 rounded-xl transition-all duration-300 ${
-              canRedo 
-                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5' 
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            }`}
-            title="İleri Al (Ctrl+Y)"
-          >
-            <span className="text-lg">↷</span>
-            <span className="ml-2 text-sm font-medium">İleri Al</span>
-          </button>
-          
-          <button
-            onClick={onFileUpload}
-            className="p-3 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-            title="Resim/PDF Yükle"
-          >
-            <span className="text-lg">📁</span>
-            <span className="ml-2 text-sm font-medium">Dosya</span>
-          </button>
-          
-          <button
-            onClick={onClear}
-            className="p-3 rounded-xl bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-            title="Tümünü Temizle"
-          >
-            <span className="text-lg">🗑️</span>
-            <span className="ml-2 text-sm font-medium">Temizle</span>
-          </button>
-        </div>
+  // Calculate dropdown position based on button position
+  const calculateDropdownPosition = (buttonRef: HTMLElement) => {
+    const rect = buttonRef.getBoundingClientRect();
+    return {
+      x: rect.left,
+      y: rect.bottom + 8
+    };
+  };
 
-        {/* Pan/Scroll Tool */}
-        <div className="flex gap-2 border-r border-gray-200/70 pr-4">
+  // Dragging functionality
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget || (e.target as HTMLElement).closest('[data-drag-handle]')) {
+      setIsDragging(true);
+      const rect = toolbarRef.current?.getBoundingClientRect();
+      if (rect) {
+        setDragOffset({
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
+        });
+      }
+    }
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (isDragging) {
+      const newX = e.clientX - dragOffset.x;
+      const newY = e.clientY - dragOffset.y;
+      
+      // Keep toolbar within viewport bounds
+      const maxX = window.innerWidth - (toolbarRef.current?.offsetWidth || 400);
+      const maxY = window.innerHeight - (toolbarRef.current?.offsetHeight || 100);
+      
+      setPosition({
+        x: Math.max(0, Math.min(newX, maxX)),
+        y: Math.max(0, Math.min(newY, maxY))
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging, dragOffset]);
+
+  if (isMinimized) {
+    return (
+      <div
+        ref={toolbarRef}
+        style={{
+          position: 'absolute',
+          left: position.x,
+          top: position.y,
+          zIndex: 20,
+          cursor: isDragging ? 'grabbing' : 'grab'
+        }}
+        onMouseDown={handleMouseDown}
+        data-drag-handle
+        className="bg-gradient-to-r from-white/95 via-white/98 to-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/50 p-2"
+      >
+        <div className="flex items-center gap-2">
           <button
-            onClick={onPanMode}
-            className={`p-3 rounded-xl transition-all duration-300 ${
-              isPanning
-                ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg ring-2 ring-white/50'
-                : 'bg-white/60 hover:bg-white/80 text-gray-700 hover:shadow-lg border border-gray-200/50'
-            }`}
-            title="Taşıma/Kaydırma (Alt+Click)"
+            onClick={() => setIsMinimized(false)}
+            className="p-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all duration-300"
+            title="Toolbar'ı Aç"
           >
-            <span className="text-lg">✋</span>
-            <span className="ml-2 text-sm font-medium">Taşı</span>
+            <span className="text-lg">🔧</span>
           </button>
-        </div>
-
-        {/* Tool Selector */}
-        <div className="flex gap-2 border-r border-gray-200/70 pr-4">
-          <div className="relative">
-            <button
-              onClick={() => setShowToolSelect(!showToolSelect)}
-              className="group flex items-center gap-3 p-3 bg-white/60 hover:bg-white/80 rounded-xl transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 border border-gray-200/50"
-              title="Araç Seç"
-            >
-              <span className="text-lg">{currentTool?.icon}</span>
-              <div className="flex flex-col items-start">
-                <span className="text-sm font-bold text-gray-700">Araç</span>
-                <span className="text-xs text-gray-500">{currentTool?.label}</span>
-              </div>
-              <span className="text-xs text-gray-400 group-hover:text-gray-600">
-                {showToolSelect ? '▲' : '▼'}
-              </span>
-            </button>
-            
-            {showToolSelect && (
-              <div className="absolute top-full left-0 mt-3 p-4 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/50 z-30 min-w-[280px]">
-                <div className="space-y-4">
-                  {/* Selection Tools */}
-                  <div>
-                    <label className="text-sm font-bold text-gray-700 mb-3 block flex items-center gap-2">
-                      <span className="w-3 h-3 bg-purple-500 rounded-full"></span>
-                      Seçim Araçları
-                    </label>
-                    <div className="grid grid-cols-1 gap-2">
-                      {groupedTools.selection.map((tool) => (
-                        <button
-                          key={tool.id}
-                          onClick={() => {
-                            setDrawingState(prev => ({ ...prev, tool: tool.id }));
-                            setShowToolSelect(false);
-                          }}
-                          className={`p-3 rounded-lg transition-all duration-300 flex items-center gap-3 ${
-                            drawingState.tool === tool.id
-                              ? `bg-gradient-to-r ${tool.gradient} text-white shadow-lg`
-                              : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200'
-                          }`}
-                        >
-                          <span className="text-lg">{tool.icon}</span>
-                          <span className="text-sm font-medium">{tool.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Drawing Tools */}
-                  <div>
-                    <label className="text-sm font-bold text-gray-700 mb-3 block flex items-center gap-2">
-                      <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
-                      Çizim Araçları
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {groupedTools.drawing.map((tool) => (
-                        <button
-                          key={tool.id}
-                          onClick={() => {
-                            setDrawingState(prev => ({ ...prev, tool: tool.id }));
-                            setShowToolSelect(false);
-                          }}
-                          className={`p-3 rounded-lg transition-all duration-300 flex items-center gap-2 ${
-                            drawingState.tool === tool.id
-                              ? `bg-gradient-to-r ${tool.gradient} text-white shadow-lg`
-                              : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200'
-                          }`}
-                        >
-                          <span className="text-lg">{tool.icon}</span>
-                          <span className="text-sm font-medium">{tool.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Shape Tools */}
-                  <div>
-                    <label className="text-sm font-bold text-gray-700 mb-3 block flex items-center gap-2">
-                      <span className="w-3 h-3 bg-green-500 rounded-full"></span>
-                      Şekil Araçları
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {groupedTools.shapes.map((tool) => (
-                        <button
-                          key={tool.id}
-                          onClick={() => {
-                            setDrawingState(prev => ({ ...prev, tool: tool.id }));
-                            setShowToolSelect(false);
-                          }}
-                          className={`p-3 rounded-lg transition-all duration-300 flex items-center gap-2 ${
-                            drawingState.tool === tool.id
-                              ? `bg-gradient-to-r ${tool.gradient} text-white shadow-lg`
-                              : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200'
-                          }`}
-                        >
-                          <span className="text-lg">{tool.icon}</span>
-                          <span className="text-sm font-medium">{tool.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Other Tools */}
-                  <div>
-                    <label className="text-sm font-bold text-gray-700 mb-3 block flex items-center gap-2">
-                      <span className="w-3 h-3 bg-orange-500 rounded-full"></span>
-                      Diğer Araçlar
-                    </label>
-                    <div className="grid grid-cols-1 gap-2">
-                      {groupedTools.other.map((tool) => (
-                        <button
-                          key={tool.id}
-                          onClick={() => {
-                            setDrawingState(prev => ({ ...prev, tool: tool.id }));
-                            setShowToolSelect(false);
-                          }}
-                          className={`p-3 rounded-lg transition-all duration-300 flex items-center gap-3 ${
-                            drawingState.tool === tool.id
-                              ? `bg-gradient-to-r ${tool.gradient} text-white shadow-lg`
-                              : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200'
-                          }`}
-                        >
-                          <span className="text-lg">{tool.icon}</span>
-                          <span className="text-sm font-medium">{tool.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+          <div className="text-sm font-medium text-gray-700">
+            {currentTool?.icon} {currentTool?.label}
           </div>
         </div>
-
-        {/* Color Selection */}
-        <div className="flex gap-2 border-r border-gray-200/70 pr-4">
-          <div className="relative">
-            <button
-              onClick={() => setShowColorPicker(!showColorPicker)}
-              className="group flex items-center gap-3 p-3 bg-white/60 hover:bg-white/80 rounded-xl transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 border border-gray-200/50"
-              title="Renk Seç"
-            >
-              <div 
-                className="w-8 h-8 rounded-lg border-2 border-white shadow-lg"
-                style={{ backgroundColor: drawingState.color }}
-              />
-              <div className="flex flex-col items-start">
-                <span className="text-sm font-bold text-gray-700">Renk</span>
-                <span className="text-xs text-gray-500 font-mono">{drawingState.color.toUpperCase()}</span>
-              </div>
-              <span className="text-xs text-gray-400 group-hover:text-gray-600 transition-colors">
-                {showColorPicker ? '▲' : '▼'}
-              </span>
-            </button>
-            
-            {showColorPicker && (
-              <div className="absolute top-full left-0 mt-3 p-4 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/50 z-30 min-w-[250px]">
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm font-bold text-gray-700 mb-3 block">Hızlı Renkler</label>
-                    <div className="grid grid-cols-7 gap-2">
-                      {quickColors.map((color) => (
-                        <button
-                          key={color}
-                          onClick={() => {
-                            setDrawingState(prev => ({ ...prev, color }));
-                            setShowColorPicker(false);
-                          }}
-                          className={`w-8 h-8 rounded-lg border-2 transition-all duration-300 hover:scale-110 ${
-                            drawingState.color === color
-                              ? 'border-blue-500 ring-2 ring-blue-200 scale-110'
-                              : 'border-gray-300 hover:border-gray-400'
-                          }`}
-                          style={{ backgroundColor: color }}
-                          title={color}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label className="text-sm font-bold text-gray-700 mb-3 block">Özel Renk</label>
-                    <input
-                      type="color"
-                      value={drawingState.color}
-                      onChange={(e) => setDrawingState(prev => ({ ...prev, color: e.target.value }))}
-                      className="w-full h-12 rounded-xl border-2 border-gray-300 cursor-pointer bg-white"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Brush Size */}
-        <div className="flex gap-2 border-r border-gray-200/70 pr-4">
-          <div className="relative">
-            <button
-              onClick={() => setShowSizeInput(!showSizeInput)}
-              className="group flex items-center gap-3 p-3 bg-white/60 hover:bg-white/80 rounded-xl transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 border border-gray-200/50"
-              title="Boyut Seç"
-            >
-              <div 
-                className="rounded-full bg-current"
-                style={{ 
-                  width: `${Math.min(drawingState.size + 4, 16)}px`, 
-                  height: `${Math.min(drawingState.size + 4, 16)}px` 
-                }}
-              />
-              <div className="flex flex-col items-start">
-                <span className="text-sm font-bold text-gray-700">Boyut</span>
-                <span className="text-xs text-gray-500 font-mono">{drawingState.size}px</span>
-              </div>
-              <span className="text-xs text-gray-400 group-hover:text-gray-600">
-                {showSizeInput ? '▲' : '▼'}
-              </span>
-            </button>
-            
-            {showSizeInput && (
-              <div className="absolute top-full left-0 mt-3 p-4 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/50 z-30 min-w-[220px]">
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm font-bold text-gray-700 mb-3 block">Hızlı Boyutlar</label>
-                    <div className="grid grid-cols-5 gap-2">
-                      {brushSizes.map((size) => (
-                        <button
-                          key={size}
-                          onClick={() => {
-                            setDrawingState(prev => ({ ...prev, size }));
-                            setShowSizeInput(false);
-                          }}
-                          className={`p-3 rounded-lg border transition-all duration-300 hover:scale-110 flex items-center justify-center ${
-                            drawingState.size === size
-                              ? 'border-blue-500 ring-2 ring-blue-200 scale-110 bg-blue-50'
-                              : 'border-gray-300 hover:border-gray-400 bg-white'
-                          }`}
-                          title={`${size}px`}
-                        >
-                          <div 
-                            className="rounded-full bg-current"
-                            style={{ 
-                              width: `${Math.min(size + 2, 12)}px`, 
-                              height: `${Math.min(size + 2, 12)}px` 
-                            }}
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label className="text-sm font-bold text-gray-700 mb-3 block">Özel Boyut (px)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="100"
-                      value={drawingState.size}
-                      onChange={(e) => setDrawingState(prev => ({ 
-                        ...prev, 
-                        size: Math.max(1, Math.min(100, parseInt(e.target.value) || 1))
-                      }))}
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-800"
-                      placeholder="Boyut"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Opacity */}
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-bold text-gray-700">Şeffaflık</span>
-          <div className="relative">
-            <input
-              type="range"
-              min="0.1"
-              max="1"
-              step="0.1"
-              value={drawingState.opacity}
-              onChange={(e) => setDrawingState(prev => ({ 
-                ...prev, 
-                opacity: parseFloat(e.target.value) 
-              }))}
-              className="w-24 h-3 bg-gradient-to-r from-gray-200 to-gray-300 rounded-full appearance-none cursor-pointer slider"
-            />
-            <div 
-              className="absolute top-0 left-0 h-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full pointer-events-none transition-all duration-300"
-              style={{ width: `${drawingState.opacity * 100}%` }}
-            />
-          </div>
-          <span className="text-sm font-mono text-gray-600 min-w-[40px]">%{Math.round(drawingState.opacity * 100)}</span>
-        </div>
-
       </div>
+    );
+  }
 
-      {/* Mobile Layout */}
-      <div className="lg:hidden">
-        {/* Main Tools Row */}
-        <div className="flex items-center gap-2 mb-3 overflow-x-auto pb-2">
-          {/* Action Buttons */}
-          <div className="flex gap-2 border-r border-gray-200/70 pr-3">
+  return (
+    <div
+      ref={toolbarRef}
+      style={{
+        position: 'absolute',
+        left: position.x,
+        top: position.y,
+        zIndex: 20,
+        cursor: isDragging ? 'grabbing' : 'default'
+      }}
+      className="bg-gradient-to-r from-white/95 via-white/98 to-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/50"
+    >
+      {/* Single Row Layout - All Screen Sizes */}
+      <div 
+        className="p-3 cursor-grab active:cursor-grabbing"
+        onMouseDown={handleMouseDown}
+        data-drag-handle
+      >
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+          
+          {/* Minimize Button - Same Row */}
+          <button
+            onClick={() => setIsMinimized(true)}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-300 flex-shrink-0"
+            title="Küçült"
+          >
+            <span className="text-sm">➖</span>
+          </button>
+
+          {/* Action Buttons Group */}
+          <div className="flex gap-1 border-r border-gray-200/70 pr-2 flex-shrink-0">
             <button
               onClick={onUndo}
               disabled={!canUndo}
-              className={`p-2.5 rounded-lg transition-all duration-300 ${
+              className={`p-2 rounded-lg transition-all duration-300 ${
                 canUndo 
-                  ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg' 
-                  : 'bg-gray-100 text-gray-400'
+                  ? 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white shadow-lg' 
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
               }`}
               title="Geri Al"
             >
-              <span className="text-lg">↶</span>
+              <span className="text-sm">↶</span>
             </button>
             
             <button
               onClick={onRedo}
               disabled={!canRedo}
-              className={`p-2.5 rounded-lg transition-all duration-300 ${
+              className={`p-2 rounded-lg transition-all duration-300 ${
                 canRedo 
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg' 
-                  : 'bg-gray-100 text-gray-400'
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white shadow-lg' 
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
               }`}
               title="İleri Al"
             >
-              <span className="text-lg">↷</span>
+              <span className="text-sm">↷</span>
             </button>
             
             <button
               onClick={onFileUpload}
-              className="p-2.5 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-lg"
+              className="p-2 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-lg"
               title="Dosya"
             >
-              <span className="text-lg">📁</span>
+              <span className="text-sm">📁</span>
             </button>
             
             <button
               onClick={onClear}
-              className="p-2.5 rounded-lg bg-gradient-to-r from-red-500 to-rose-600 text-white shadow-lg"
+              className="p-2 rounded-lg bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white shadow-lg"
               title="Temizle"
             >
-              <span className="text-lg">🗑️</span>
+              <span className="text-sm">🗑️</span>
             </button>
           </div>
 
-          {/* Pan Tool */}
-          <div className="flex gap-2 border-r border-gray-200/70 pr-3">
+          {/* Pan/Scroll Tool */}
+          <div className="flex gap-1 border-r border-gray-200/70 pr-2 flex-shrink-0">
             <button
               onClick={onPanMode}
-              className={`p-2.5 rounded-lg transition-all duration-300 ${
+              className={`p-2 rounded-lg transition-all duration-300 ${
                 isPanning
                   ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg'
-                  : 'bg-white/60 text-gray-700 border border-gray-200/50'
+                  : 'bg-white/60 hover:bg-white/80 text-gray-700 border border-gray-200/50'
               }`}
               title="Taşı"
             >
-              <span className="text-lg">✋</span>
+              <span className="text-sm">✋</span>
             </button>
           </div>
 
           {/* Tool Selector */}
-          <div className="flex gap-2 border-r border-gray-200/70 pr-3">
+          <div className="flex gap-1 border-r border-gray-200/70 pr-2 flex-shrink-0">
             <div className="relative">
               <button
-                onClick={() => setShowToolSelect(!showToolSelect)}
-                className="flex items-center gap-2 p-2.5 bg-white/60 rounded-lg border border-gray-200/50"
+                onClick={(e) => {
+                  const pos = calculateDropdownPosition(e.currentTarget);
+                  setDropdownPosition(pos);
+                  setShowToolSelect(!showToolSelect);
+                }}
+                onTouchStart={(e) => e.preventDefault()}
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  const pos = calculateDropdownPosition(e.currentTarget);
+                  setDropdownPosition(pos);
+                  setShowToolSelect(!showToolSelect);
+                }}
+                className="flex items-center gap-2 p-2 bg-white/60 hover:bg-white/80 rounded-lg border border-gray-200/50 transition-all duration-300 touch-manipulation"
                 title="Araç"
               >
-                <span className="text-lg">{currentTool?.icon}</span>
+                <span className="text-sm">{currentTool?.icon}</span>
                 <span className="text-xs text-gray-600">{showToolSelect ? '▲' : '▼'}</span>
               </button>
               
               {showToolSelect && (
-                <div className="absolute top-full left-0 mt-2 p-3 bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border border-white/50 z-30 min-w-[200px]">
+                <div 
+                  className="fixed p-4 bg-white rounded-xl shadow-2xl border border-gray-300 z-[9999] min-w-[200px] max-w-[300px]"
+                  style={{
+                    left: `${dropdownPosition.x}px`,
+                    top: `${dropdownPosition.y}px`
+                  }}
+                >
                   <div className="space-y-3">
                     {/* Selection */}
                     <div>
@@ -525,10 +294,16 @@ export default function Toolbar({
                               setDrawingState(prev => ({ ...prev, tool: tool.id }));
                               setShowToolSelect(false);
                             }}
-                            className={`p-2 rounded border transition-all duration-300 flex items-center gap-2 ${
+                            onTouchStart={(e) => e.preventDefault()}
+                            onTouchEnd={(e) => {
+                              e.preventDefault();
+                              setDrawingState(prev => ({ ...prev, tool: tool.id }));
+                              setShowToolSelect(false);
+                            }}
+                            className={`p-2 rounded-lg transition-all duration-300 flex items-center gap-2 touch-manipulation ${
                               drawingState.tool === tool.id
-                                ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                : 'border-gray-300 hover:border-gray-400 bg-white'
+                                ? `bg-gradient-to-r ${tool.gradient} text-white shadow-lg`
+                                : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200'
                             }`}
                           >
                             <span className="text-sm">{tool.icon}</span>
@@ -549,10 +324,16 @@ export default function Toolbar({
                               setDrawingState(prev => ({ ...prev, tool: tool.id }));
                               setShowToolSelect(false);
                             }}
-                            className={`p-2 rounded border transition-all duration-300 flex items-center gap-1 ${
+                            onTouchStart={(e) => e.preventDefault()}
+                            onTouchEnd={(e) => {
+                              e.preventDefault();
+                              setDrawingState(prev => ({ ...prev, tool: tool.id }));
+                              setShowToolSelect(false);
+                            }}
+                            className={`p-2 rounded-lg transition-all duration-300 flex items-center gap-1 touch-manipulation ${
                               drawingState.tool === tool.id
-                                ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                : 'border-gray-300 hover:border-gray-400 bg-white'
+                                ? `bg-gradient-to-r ${tool.gradient} text-white shadow-lg`
+                                : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200'
                             }`}
                           >
                             <span className="text-sm">{tool.icon}</span>
@@ -573,10 +354,16 @@ export default function Toolbar({
                               setDrawingState(prev => ({ ...prev, tool: tool.id }));
                               setShowToolSelect(false);
                             }}
-                            className={`p-2 rounded border transition-all duration-300 flex items-center gap-1 ${
+                            onTouchStart={(e) => e.preventDefault()}
+                            onTouchEnd={(e) => {
+                              e.preventDefault();
+                              setDrawingState(prev => ({ ...prev, tool: tool.id }));
+                              setShowToolSelect(false);
+                            }}
+                            className={`p-2 rounded-lg transition-all duration-300 flex items-center gap-1 touch-manipulation ${
                               drawingState.tool === tool.id
-                                ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                : 'border-gray-300 hover:border-gray-400 bg-white'
+                                ? `bg-gradient-to-r ${tool.gradient} text-white shadow-lg`
+                                : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200'
                             }`}
                           >
                             <span className="text-sm">{tool.icon}</span>
@@ -597,10 +384,16 @@ export default function Toolbar({
                               setDrawingState(prev => ({ ...prev, tool: tool.id }));
                               setShowToolSelect(false);
                             }}
-                            className={`p-2 rounded border transition-all duration-300 flex items-center gap-2 ${
+                            onTouchStart={(e) => e.preventDefault()}
+                            onTouchEnd={(e) => {
+                              e.preventDefault();
+                              setDrawingState(prev => ({ ...prev, tool: tool.id }));
+                              setShowToolSelect(false);
+                            }}
+                            className={`p-2 rounded-lg transition-all duration-300 flex items-center gap-2 touch-manipulation ${
                               drawingState.tool === tool.id
-                                ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                : 'border-gray-300 hover:border-gray-400 bg-white'
+                                ? `bg-gradient-to-r ${tool.gradient} text-white shadow-lg`
+                                : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200'
                             }`}
                           >
                             <span className="text-sm">{tool.icon}</span>
@@ -614,147 +407,201 @@ export default function Toolbar({
               )}
             </div>
           </div>
-        </div>
 
-        {/* Settings Row */}
-        <div className="flex items-center gap-3">
-          {/* Color */}
-          <div className="relative">
-            <button
-              onClick={() => setShowColorPicker(!showColorPicker)}
-              className="flex items-center gap-2 p-2.5 bg-white/60 rounded-lg border border-gray-200/50"
-              title="Renk"
-            >
-              <div 
-                className="w-6 h-6 rounded border-2 border-white shadow-lg"
-                style={{ backgroundColor: drawingState.color }}
-              />
-              <span className="text-xs text-gray-600">{showColorPicker ? '▲' : '▼'}</span>
-            </button>
-            
-            {showColorPicker && (
-              <div className="absolute top-full left-0 mt-2 p-3 bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border border-white/50 z-30 min-w-[200px]">
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs font-bold text-gray-700 mb-2 block">Hızlı Renkler</label>
-                    <div className="grid grid-cols-7 gap-1">
-                      {quickColors.map((color) => (
-                        <button
-                          key={color}
-                          onClick={() => {
-                            setDrawingState(prev => ({ ...prev, color }));
-                            setShowColorPicker(false);
-                          }}
-                          className={`w-6 h-6 rounded border transition-all duration-300 hover:scale-110 ${
-                            drawingState.color === color
-                              ? 'border-blue-500 ring-2 ring-blue-200 scale-110'
-                              : 'border-gray-300 hover:border-gray-400'
-                          }`}
-                          style={{ backgroundColor: color }}
-                          title={color}
-                        />
-                      ))}
+          {/* Color Selection */}
+          <div className="flex gap-1 border-r border-gray-200/70 pr-2 flex-shrink-0">
+            <div className="relative">
+              <button
+                onClick={(e) => {
+                  const pos = calculateDropdownPosition(e.currentTarget);
+                  setDropdownPosition(pos);
+                  setShowColorPicker(!showColorPicker);
+                }}
+                onTouchStart={(e) => e.preventDefault()}
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  const pos = calculateDropdownPosition(e.currentTarget);
+                  setDropdownPosition(pos);
+                  setShowColorPicker(!showColorPicker);
+                }}
+                className="flex items-center gap-2 p-2 bg-white/60 hover:bg-white/80 rounded-lg border border-gray-200/50 transition-all duration-300 touch-manipulation"
+                title="Renk"
+              >
+                <div 
+                  className="w-5 h-5 rounded border-2 border-white shadow"
+                  style={{ backgroundColor: drawingState.color }}
+                />
+                <span className="text-xs text-gray-600">{showColorPicker ? '▲' : '▼'}</span>
+              </button>
+              
+              {showColorPicker && (
+                <div 
+                  className="fixed p-4 bg-white rounded-xl shadow-2xl border border-gray-300 z-[9999] min-w-[180px] max-w-[250px]"
+                  style={{
+                    left: `${dropdownPosition.x}px`,
+                    top: `${dropdownPosition.y}px`
+                  }}
+                >
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-bold text-gray-700 mb-2 block">Hızlı Renkler</label>
+                      <div className="grid grid-cols-6 gap-1">
+                        {quickColors.map((color) => (
+                          <button
+                            key={color}
+                            onClick={() => {
+                              setDrawingState(prev => ({ ...prev, color }));
+                              setShowColorPicker(false);
+                            }}
+                            onTouchStart={(e) => e.preventDefault()}
+                            onTouchEnd={(e) => {
+                              e.preventDefault();
+                              setDrawingState(prev => ({ ...prev, color }));
+                              setShowColorPicker(false);
+                            }}
+                            className={`w-5 h-5 rounded border-2 transition-all duration-300 hover:scale-110 touch-manipulation ${
+                              drawingState.color === color
+                                ? 'border-blue-500 ring-2 ring-blue-200 scale-110'
+                                : 'border-gray-300 hover:border-gray-400'
+                            }`}
+                            style={{ backgroundColor: color }}
+                            title={color}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="text-xs font-bold text-gray-700 mb-2 block">Özel Renk</label>
+                      <input
+                        type="color"
+                        value={drawingState.color}
+                        onChange={(e) => {
+                          setDrawingState(prev => ({ ...prev, color: e.target.value }));
+                        }}
+                        className="w-full h-8 rounded border-2 border-gray-300 cursor-pointer bg-white"
+                      />
                     </div>
                   </div>
-                  
-                  <div>
-                    <label className="text-xs font-bold text-gray-700 mb-2 block">Özel Renk</label>
-                    <input
-                      type="color"
-                      value={drawingState.color}
-                      onChange={(e) => setDrawingState(prev => ({ ...prev, color: e.target.value }))}
-                      className="w-full h-8 rounded border-2 border-gray-300 cursor-pointer bg-white"
-                    />
-                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
-          {/* Size */}
-          <div className="relative">
-            <button
-              onClick={() => setShowSizeInput(!showSizeInput)}
-              className="flex items-center gap-2 p-2.5 bg-white/60 rounded-lg border border-gray-200/50"
-              title="Boyut"
-            >
-              <div 
-                className="rounded-full bg-current"
-                style={{ 
-                  width: `${Math.min(drawingState.size + 2, 12)}px`, 
-                  height: `${Math.min(drawingState.size + 2, 12)}px` 
+          {/* Brush Size */}
+          <div className="flex gap-1 border-r border-gray-200/70 pr-2 flex-shrink-0">
+            <div className="relative">
+              <button
+                onClick={(e) => {
+                  const pos = calculateDropdownPosition(e.currentTarget);
+                  setDropdownPosition(pos);
+                  setShowSizeInput(!showSizeInput);
                 }}
-              />
-              <span className="text-xs font-bold text-gray-600">{drawingState.size}px</span>
-              <span className="text-xs text-gray-600">{showSizeInput ? '▲' : '▼'}</span>
-            </button>
-            
-            {showSizeInput && (
-              <div className="absolute top-full left-0 mt-2 p-3 bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border border-white/50 z-30 min-w-[180px]">
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs font-bold text-gray-700 mb-2 block">Hızlı Boyutlar</label>
-                    <div className="grid grid-cols-5 gap-1">
-                      {brushSizes.map((size) => (
-                        <button
-                          key={size}
-                          onClick={() => {
-                            setDrawingState(prev => ({ ...prev, size }));
-                            setShowSizeInput(false);
-                          }}
-                          className={`p-2 rounded border transition-all duration-300 hover:scale-110 flex items-center justify-center ${
-                            drawingState.size === size
-                              ? 'border-blue-500 ring-2 ring-blue-200 scale-110 bg-blue-50'
-                              : 'border-gray-300 hover:border-gray-400 bg-white'
-                          }`}
-                          title={`${size}px`}
-                        >
-                          <div 
-                            className="rounded-full bg-current"
-                            style={{ 
-                              width: `${Math.min(size + 2, 12)}px`, 
-                              height: `${Math.min(size + 2, 12)}px` 
+                onTouchStart={(e) => e.preventDefault()}
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  const pos = calculateDropdownPosition(e.currentTarget);
+                  setDropdownPosition(pos);
+                  setShowSizeInput(!showSizeInput);
+                }}
+                className="flex items-center gap-2 p-2 bg-white/60 hover:bg-white/80 rounded-lg border border-gray-200/50 transition-all duration-300 touch-manipulation"
+                title="Boyut"
+              >
+                <div className="w-5 h-5 rounded-full bg-gray-300 flex items-center justify-center">
+                  <div 
+                    className="rounded-full bg-gray-600"
+                    style={{ 
+                      width: Math.max(2, drawingState.size / 3), 
+                      height: Math.max(2, drawingState.size / 3) 
+                    }}
+                  />
+                </div>
+                <span className="text-xs text-gray-600">{showSizeInput ? '▲' : '▼'}</span>
+              </button>
+              
+              {showSizeInput && (
+                <div 
+                  className="fixed p-4 bg-white rounded-xl shadow-2xl border border-gray-300 z-[9999] min-w-[150px] max-w-[200px]"
+                  style={{
+                    left: `${dropdownPosition.x}px`,
+                    top: `${dropdownPosition.y}px`
+                  }}
+                >
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-bold text-gray-700 mb-2 block">Hızlı Boyutlar</label>
+                      <div className="grid grid-cols-2 gap-1">
+                        {brushSizes.slice(0, 6).map((size) => (
+                          <button
+                            key={size}
+                            onClick={() => {
+                              setDrawingState(prev => ({ ...prev, size }));
+                              setShowSizeInput(false);
                             }}
-                          />
-                        </button>
-                      ))}
+                            onTouchStart={(e) => e.preventDefault()}
+                            onTouchEnd={(e) => {
+                              e.preventDefault();
+                              setDrawingState(prev => ({ ...prev, size }));
+                              setShowSizeInput(false);
+                            }}
+                            className={`p-2 rounded-lg transition-all duration-300 flex items-center justify-center touch-manipulation ${
+                              drawingState.size === size
+                                ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg'
+                                : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200'
+                            }`}
+                          >
+                            <div 
+                              className="rounded-full bg-current"
+                              style={{ 
+                                width: Math.max(2, size / 3), 
+                                height: Math.max(2, size / 3) 
+                              }}
+                            />
+                            <span className="ml-1 text-xs font-medium">{size}px</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="text-xs font-bold text-gray-700 mb-2 block">Özel Boyut</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={drawingState.size}
+                        onChange={(e) => {
+                          setDrawingState(prev => ({ 
+                            ...prev, 
+                            size: Math.max(1, Math.min(100, parseInt(e.target.value) || 1))
+                          }));
+                        }}
+                        className="w-full px-2 py-1 text-sm rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-800"
+                        placeholder="Boyut"
+                      />
                     </div>
                   </div>
-                  
-                  <div>
-                    <label className="text-xs font-bold text-gray-700 mb-2 block">Özel Boyut (px)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="100"
-                      value={drawingState.size}
-                      onChange={(e) => setDrawingState(prev => ({ 
-                        ...prev, 
-                        size: Math.max(1, Math.min(100, parseInt(e.target.value) || 1))
-                      }))}
-                      className="w-full px-2 py-1 text-sm rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-800"
-                      placeholder="Boyut"
-                    />
-                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Opacity */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-gray-600">%{Math.round(drawingState.opacity * 100)}</span>
-            <div className="relative">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="text-xs font-bold text-gray-700">Op</span>
+            <div className="relative w-16">
               <input
                 type="range"
-                min="0.1"
+                min="0"
                 max="1"
                 step="0.1"
                 value={drawingState.opacity}
-                onChange={(e) => setDrawingState(prev => ({ 
-                  ...prev, 
-                  opacity: parseFloat(e.target.value) 
-                }))}
+                onChange={(e) => {
+                  setDrawingState(prev => ({ 
+                    ...prev, 
+                    opacity: parseFloat(e.target.value) 
+                  }));
+                }}
                 className="w-16 h-2 bg-gradient-to-r from-gray-200 to-gray-300 rounded-full appearance-none cursor-pointer slider"
               />
               <div 
@@ -762,14 +609,16 @@ export default function Toolbar({
                 style={{ width: `${drawingState.opacity * 100}%` }}
               />
             </div>
+            <span className="text-xs font-mono text-gray-600">%{Math.round(drawingState.opacity * 100)}</span>
           </div>
+
         </div>
       </div>
 
       {/* Click outside to close dropdowns */}
       {(showColorPicker || showSizeInput || showToolSelect) && (
         <div 
-          className="fixed inset-0 z-10" 
+          className="fixed inset-0 z-[9998]" 
           onClick={() => {
             setShowColorPicker(false);
             setShowSizeInput(false);

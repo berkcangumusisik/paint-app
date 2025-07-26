@@ -416,6 +416,11 @@ textarea:focus-visible {
   will-change: transform;
 }
 
+/* Custom z-index utilities */
+.z-60 {
+  z-index: 60;
+}
+
 /* Mobile optimizations */
 @media (max-width: 768px) {
   .toolbar {
@@ -437,6 +442,78 @@ textarea:focus-visible {
     border-radius: 0 0 20px 20px;
     border-top: none;
   }
+
+  /* Draggable toolbar mobile optimizations */
+  .draggable-toolbar {
+    touch-action: none;
+    user-select: none;
+  }
+
+  .draggable-toolbar * {
+    touch-action: none;
+  }
+
+  /* Mobile touch improvements */
+  .mobile-touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Mobile scroll improvements */
+  .mobile-scroll {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .mobile-scroll::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Tablet optimizations */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .tablet-toolbar {
+    max-width: 90vw;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
+
+/* Enhanced responsive breakpoints */
+@media (max-width: 480px) {
+  .mobile-compact {
+    padding: 0.5rem;
+    gap: 0.25rem;
+  }
+  
+  .mobile-compact button {
+    padding: 0.5rem;
+    font-size: 0.875rem;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
+  .mobile-standard {
+    padding: 0.75rem;
+    gap: 0.5rem;
+  }
+}
+
+/* Landscape mobile optimizations */
+@media (max-width: 768px) and (orientation: landscape) {
+  .landscape-toolbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: auto;
+    border-radius: 0 0 20px 20px;
+    border-top: none;
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+
 }
 
 /* Button gradient effects */
@@ -467,4 +544,14 @@ textarea:focus-visible {
   40% { content: '.'; }
   60% { content: '..'; }
   80%, 100% { content: '...'; }
+}
+
+/* Hide scrollbar for mobile */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* Internet Explorer 10+ */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Safari and Chrome */
 }

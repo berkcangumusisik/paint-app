@@ -173,7 +173,7 @@ export default function WelcomeScreen({ onClose }: WelcomeScreenProps) {
               </div>
               <div className="flex items-start gap-2">
                 <span className="text-yellow-500 mt-1">•</span>
-                <span>Yapışkan not eklemek için "Yapışkan Not" aracını seçin ve tıklayın</span>
+                <span>Yapışkan not eklemek için &quot;Yapışkan Not&quot; aracını seçin ve tıklayın</span>
               </div>
               <div className="flex items-start gap-2">
                 <span className="text-yellow-500 mt-1">•</span>

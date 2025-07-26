@@ -76,11 +76,57 @@ export default function Whiteboard() {
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [lastPanPoint, setLastPanPoint] = useState<Point>({ x: 0, y: 0 });
-  const [showGrid, setShowGrid] = useState(true);
   const [showWelcome, setShowWelcome] = useState(true);
   const [stickyNotes, setStickyNotes] = useState<StickyNote[]>([]);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
   const [isPanMode, setIsPanMode] = useState(false);
+  const [backgroundColor, setBackgroundColor] = useState('#ffffff');
+  const [showBgColorPicker, setShowBgColorPicker] = useState(false);
+  const backgroundColors = [
+    { id: 'white', color: '#ffffff', name: 'Beyaz' },
+    { id: 'light-gray', color: '#f8f9fa', name: 'Açık Gri' },
+    { id: 'gray-1', color: '#e9ecef', name: 'Gri 1' },
+    { id: 'gray-2', color: '#dee2e6', name: 'Gri 2' },
+    { id: 'gray-3', color: '#ced4da', name: 'Gri 3' },
+    { id: 'black', color: '#000000', name: 'Siyah' },
+    { id: 'dark-gray-1', color: '#212529', name: 'Koyu Gri 1' },
+    { id: 'dark-gray-2', color: '#343a40', name: 'Koyu Gri 2' },
+    { id: 'dark-gray-3', color: '#495057', name: 'Koyu Gri 3' },
+    { id: 'dark-gray-4', color: '#6c757d', name: 'Koyu Gri 4' },
+    { id: 'cream', color: '#f5f5dc', name: 'Krem' },
+    { id: 'pink', color: '#ffe4e1', name: 'Pembe' },
+    { id: 'lavender', color: '#e6e6fa', name: 'Lavanta' },
+    { id: 'light-blue', color: '#f0f8ff', name: 'Açık Mavi' },
+    { id: 'light-gray-alt', color: '#f0f0f0', name: 'Açık Gri Alt' }
+  ];
+
+  // Debug background color changes
+  useEffect(() => {
+    console.log('🔍 Background color changed to:', backgroundColor);
+  }, [backgroundColor]);
+
+  // Function to update canvas background
+  const updateCanvasBackground = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    console.log('🎨 Updating canvas background to:', backgroundColor);
+    
+    // Clear and fill with new background color
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Force a repaint
+    canvas.style.display = 'none';
+    canvas.offsetHeight; // Trigger reflow
+    canvas.style.display = 'block';
+  }, [backgroundColor]);
+
+
 
   // Canvas setup
   useEffect(() => {
@@ -90,6 +136,14 @@ export default function Whiteboard() {
     const resizeCanvas = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
+      
+      // Set initial background color
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      
       redrawCanvas();
     };
 
@@ -135,19 +189,24 @@ export default function Whiteboard() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Clear canvas
+    // Clear canvas completely first
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Fill with background color
+    console.log('🎨 Drawing background color:', backgroundColor);
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Reset composite operation
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
     
     // Apply transformations
     ctx.save();
     ctx.scale(zoom, zoom);
     ctx.translate(panOffset.x, panOffset.y);
 
-    // Draw grid
-    if (showGrid) {
-      drawGrid(ctx, canvas.width / zoom, canvas.height / zoom);
-    }
-
+   
     // Draw all elements
     elements.forEach(element => {
       if ('points' in element && Array.isArray(element.points)) {
@@ -270,7 +329,7 @@ export default function Whiteboard() {
     }
 
     ctx.restore();
-  }, [elements, stickyNotes, currentShape, zoom, panOffset, showGrid, selectedElement]);
+  }, [elements, stickyNotes, currentShape, zoom, panOffset, selectedElement, backgroundColor]);
 
   const drawGrid = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
     const gridSize = 20;
@@ -563,10 +622,24 @@ export default function Whiteboard() {
 
   useEffect(() => {
     redrawCanvas();
-  }, [redrawCanvas]);
+  }, [elements, stickyNotes, currentShape, zoom, panOffset, selectedElement, backgroundColor]);
+
+  // Update canvas background when backgroundColor changes
+  useEffect(() => {
+    updateCanvasBackground();
+    // Small delay to ensure background is updated before redrawing
+    setTimeout(() => {
+      redrawCanvas();
+    }, 10);
+  }, [backgroundColor, updateCanvasBackground]);
+
+
 
   return (
-    <div className="h-screen w-full overflow-hidden relative bg-transparent">
+    <div 
+      className="h-screen w-full overflow-hidden relative"
+      style={{ backgroundColor }}
+    >
       <input
         ref={fileInputRef}
         type="file"
@@ -600,6 +673,8 @@ export default function Whiteboard() {
         canRedo={redoStack.length > 0}
         onPanMode={() => setIsPanMode(!isPanMode)}
         isPanning={isPanMode}
+        onBackgroundColorChange={setBackgroundColor}
+        backgroundColor={backgroundColor}
       />
 
       <CanvasControls 
@@ -618,28 +693,69 @@ export default function Whiteboard() {
 
       <MediaUploader onFileUpload={handleFileUpload} />
 
-      <button
-        onClick={() => setShowGrid(!showGrid)}
-        className="absolute bottom-4 left-4 z-10 p-3 bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border border-white/50 hover:bg-white hover:shadow-3xl transition-all duration-300 text-gray-700 text-lg transform hover:-translate-y-1"
-        title={`${showGrid ? 'Izgarayı Gizle' : 'Izgarayı Göster'}`}
-      >
-        {showGrid ? '🔳' : '⬜'}
-      </button>
+      
 
-      <button
-        onClick={() => setShowWelcome(true)}
-        className="absolute bottom-4 left-20 z-10 p-3 bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border border-white/50 hover:bg-white hover:shadow-3xl transition-all duration-300 text-gray-700 text-lg transform hover:-translate-y-1"
-        title="Yardım"
-      >
-        ❓
-      </button>
-
-      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-10 px-4 py-2 bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border border-white/50 text-sm text-gray-700 font-medium">
-        <span className="text-blue-600">{drawingState.tool.charAt(0).toUpperCase() + drawingState.tool.slice(1)}</span>
-        <span className="mx-3 text-gray-400">•</span>
-        <span className="text-purple-600">%{Math.round(zoom * 100)}</span>
-        <span className="mx-3 text-gray-400">•</span>
-        <span className="text-green-600">{elements.length + stickyNotes.length} öğe</span>
+      {/* Alt bilgi barı: Hepsi tek kutuda, tek satırda, ortalanmış */}
+      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-10">
+        <div className="flex items-center gap-3 px-4 py-2 bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border border-white/50 text-sm text-gray-700 font-medium relative">
+          <span className="text-blue-600">{drawingState.tool.charAt(0).toUpperCase() + drawingState.tool.slice(1)}</span>
+          <span className="mx-2 text-gray-400">•</span>
+          <span className="text-purple-600">%{Math.round(zoom * 100)}</span>
+          <span className="mx-2 text-gray-400">•</span>
+          <span className="text-green-600">{elements.length + stickyNotes.length} öğe</span>
+          <button
+            onClick={() => setShowBgColorPicker(v => !v)}
+            className="ml-3 p-2 rounded-lg bg-white border border-gray-200 shadow hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            title="Arka Plan Rengini Değiştir"
+          >
+            🎨
+          </button>
+          <button
+            onClick={() => setShowWelcome(true)}
+            className="ml-1 p-2 rounded-lg bg-white border border-gray-200 shadow hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            title="Yardım"
+          >
+            ❓
+          </button>
+          {/* Renk Paleti Popup */}
+          {showBgColorPicker && (
+            <div className="absolute bottom-14 left-0 bg-white p-4 rounded-xl shadow-2xl border z-50 flex flex-col gap-2 min-w-[220px] animate-fade-in">
+              <div className="grid grid-cols-5 gap-2 mb-2">
+                {backgroundColors.map((colorObj) => (
+                  <button
+                    key={colorObj.id}
+                    onClick={() => {
+                      setBackgroundColor(colorObj.color);
+                      setShowBgColorPicker(false);
+                    }}
+                    className={`w-7 h-7 rounded-lg border-2 transition-all duration-200 ${backgroundColor === colorObj.color ? 'border-blue-500 ring-2 ring-blue-200 scale-110' : 'border-gray-300 hover:border-gray-400'}`}
+                    style={{ backgroundColor: colorObj.color }}
+                    title={colorObj.name}
+                  />
+                ))}
+              </div>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="color"
+                  value={backgroundColor}
+                  onChange={e => setBackgroundColor(e.target.value)}
+                  className="w-8 h-8 rounded border-2 border-gray-300 cursor-pointer bg-white"
+                />
+                <input
+                  type="text"
+                  value={backgroundColor}
+                  onChange={e => setBackgroundColor(e.target.value)}
+                  placeholder="#ffffff"
+                  className="flex-1 h-8 px-2 rounded border-2 border-gray-300 bg-white text-gray-800 text-sm"
+                />
+              </div>
+              <button
+                onClick={() => setShowBgColorPicker(false)}
+                className="mt-2 px-3 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs border border-gray-300 self-end"
+              >Kapat</button>
+            </div>
+          )}
+        </div>
       </div>
 
       <canvas
@@ -650,11 +766,13 @@ export default function Whiteboard() {
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         style={{ 
+          backgroundColor: backgroundColor,
           cursor: isPanning || isPanMode ? 'grabbing' : 
                  drawingState.tool === 'silgi' ? 'crosshair' :
                  drawingState.tool === 'seç' ? 'default' : 
                  drawingState.tool === 'yapışkan-not' ? 'copy' : 'crosshair'
         }}
+        data-background-color={backgroundColor}
       />
     </div>
   );
