@@ -2,7 +2,6 @@
 
 A professional-grade digital whiteboard application built with Next.js, React, TypeScript, and Tailwind CSS. Inspired by Microsoft Whiteboard with modern UI/UX and advanced features.
 
-![Whiteboard Preview](https://via.placeholder.com/800x400/3B82F6/FFFFFF?text=Modern+Whiteboard)
 
 ## ✨ Features
 
